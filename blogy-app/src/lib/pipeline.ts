@@ -50,8 +50,11 @@ export type PipelineResponse = {
   usedFallback: boolean;
 };
 
-const openAiClient = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const openRouterClient = process.env.OPENROUTER_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+    })
   : null;
 
 const fallbackExample = `
@@ -275,17 +278,17 @@ Rules:
   ];
 };
 
-const generateWithOpenAI = async (
+const generateWithOpenRouter = async (
   payload: PipelineRequest,
   outline: OutlineSection[],
 ): Promise<{ text: string; usedFallback: boolean }> => {
-  if (!openAiClient) {
+  if (!openRouterClient) {
     return { text: fallbackExample, usedFallback: true };
   }
 
   try {
-    const completion = await openAiClient.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await openRouterClient.chat.completions.create({
+      model: "anthropic/claude-3.5-sonnet",
       temperature: 0.65,
       max_tokens: 900,
       messages: buildPrompt(payload, outline),
@@ -294,7 +297,7 @@ const generateWithOpenAI = async (
     const content = completion.choices[0]?.message?.content?.trim();
     return { text: content || fallbackExample, usedFallback: !content };
   } catch (error) {
-    console.error("OpenAI generation failed, falling back to sample copy", error);
+    console.error("OpenRouter generation failed, falling back to sample copy", error);
     return { text: fallbackExample, usedFallback: true };
   }
 };
@@ -305,7 +308,7 @@ export async function runPipeline(payload: PipelineRequest): Promise<PipelineRes
   const serpInsights = makeSerpInsights(keyword);
   const outline = makeOutline(keyword, payload.intent, payload.audience);
   const voice = pickVoice(payload.brandVoice, payload.tone);
-  const { text, usedFallback } = await generateWithOpenAI(
+  const { text, usedFallback } = await generateWithOpenRouter(
     { ...payload, brandVoice: voice },
     outline,
   );

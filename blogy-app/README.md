@@ -5,7 +5,7 @@ Full-stack Next.js app that runs the Blogy workflow: keyword clustering, SERP ga
 ### Core Features
 - Keyword clusters (primary, pain-point, proof) with volume/difficulty heuristics.
 - SERP gap map with snippet opportunities and missing coverage highlights.
-- Outline + multi-stage prompt pipeline that can call OpenAI for live drafts (fallback sample copy if no key).
+- Outline + multi-stage prompt pipeline that calls OpenRouter for live drafts (fallback sample copy if no key).
 - SEO scorecard: placement checks, snippet readiness, readability band, meta + FAQ schema ideas, CTA variants.
 - Platform presets for LinkedIn, Medium, WordPress, Dev.to, and Hashnode.
 
@@ -17,9 +17,9 @@ Full-stack Next.js app that runs the Blogy workflow: keyword clustering, SERP ga
 2. Add environment variables  
    Copy `.env.example` to `.env.local` and populate:
    ```
-   OPENAI_API_KEY=your-openai-key
+   OPENROUTER_API_KEY=your-openrouter-key
    ```
-   The key enables live content generation; without it the app uses the built-in sample draft.
+   The key enables live content generation via OpenRouter; without it the app uses the built-in sample draft.
 3. Run the dev server
    ```bash
    npm run dev

@@ -235,8 +235,8 @@ export default function Home() {
               <li>• CTA variants per platform + schema hints for WordPress</li>
             </ul>
             <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-              Bring your OpenAI API key to unlock live generation. Without it, we’ll use the built-in
-              sample copy.
+              Bring your OpenRouter API key to unlock live generation. Without it, we’ll use the
+              built-in sample copy.
             </div>
           </div>
         </section>
@@ -324,7 +324,7 @@ export default function Home() {
                 </div>
                 {data.usedFallback && (
                   <p className="mt-3 text-xs text-amber-200">
-                    Using sample copy. Add your OpenAI API key for live generation.
+                    Using sample copy. Add your OpenRouter API key for live generation.
                   </p>
                 )}
               </div>

@@ -3,6 +3,8 @@ node_modules/
 .turbo/
 .env.local
 .env.*
+!.env.example
+!blogy-app/.env.example
 npm-debug.log*
 yarn-error.log*
 pnpm-lock.yaml
