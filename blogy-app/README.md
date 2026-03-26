@@ -15,11 +15,13 @@ Full-stack Next.js app that runs the Blogy workflow: keyword clustering, SERP ga
    npm install
    ```
 2. Add environment variables  
-   Copy `.env.example` to `.env.local` and populate:
+   Copy `.env.example` to `.env.local` and populate it with your custom LLM API credentials (Ollama-compatible):
    ```
-   OPENROUTER_API_KEY=your-openrouter-key
+   LLAMA_API_KEY=your_api_key_here
+   LLAMA_BASE_URL=https://ollama.com/v1
+   LLAMA_MODEL=gpt-oss:120b-cloud
    ```
-   The key enables live content generation via OpenRouter; without it the app uses the built-in sample draft.
+   These keys enable live content generation via your custom API provider; without them the app uses a built-in sample draft.
 3. Run the dev server
    ```bash
    npm run dev
@@ -43,7 +45,7 @@ Full-stack Next.js app that runs the Blogy workflow: keyword clustering, SERP ga
     "platforms": ["LinkedIn", "Medium", "WordPress"]
   }
   ```
-  Returns clusters, SERP insights, outline, generated markdown (live if `OPENAI_API_KEY` is present), SEO scorecard, and timeline steps.
+  Returns clusters, SERP insights, outline, generated markdown (live if `LLAMA_API_KEY` is present), SEO scorecard, and timeline steps.
 
 ### Design Notes
 - Gradient-heavy, glassmorphic cards with Space Grotesk typography.
