@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PipelineResponse } from "@/lib/pipeline";
+import type { KeywordCluster, SerpInsight, OutlineSection, SeoScorecard } from "@/lib/pipeline";
 
 type FormState = {
   keyword: string;
@@ -11,6 +11,20 @@ type FormState = {
   brandVoice: string;
   targetLength: number;
   platforms: string[];
+};
+
+type Step = 1 | 2 | 3;
+
+type ResearchData = {
+  clusters: KeywordCluster[];
+  serpInsights: SerpInsight[];
+  outline: OutlineSection[];
+};
+
+type GeneratedData = {
+  generated: string;
+  seo: SeoScorecard;
+  usedFallback: boolean;
 };
 
 const defaultForm: FormState = {
@@ -29,9 +43,12 @@ const gradientBorder =
   "border border-white/10 bg-white/5 shadow-[0_30px_80px_-50px_rgba(0,0,0,0.8)] backdrop-blur-xl";
 
 export default function Home() {
+  const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<PipelineResponse | null>(null);
+  const [researchData, setResearchData] = useState<ResearchData | null>(null);
+  const [editableOutline, setEditableOutline] = useState<OutlineSection[]>([]);
+  const [generatedData, setGeneratedData] = useState<GeneratedData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const togglePlatform = (platform: string) => {
@@ -46,23 +63,24 @@ export default function Home() {
     });
   };
 
-  const submit = async () => {
+  const generateResearch = async () => {
     setError(null);
     setLoading(true);
-    setData(null);
 
     try {
-      const res = await fetch("/api/pipeline", {
+      const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!res.ok) {
-        const message = (await res.json())?.error ?? "Unable to generate plan.";
+        const message = (await res.json())?.error ?? "Unable to generate research.";
         throw new Error(message);
       }
-      const json = (await res.json()) as PipelineResponse;
-      setData(json);
+      const json = (await res.json()) as ResearchData;
+      setResearchData(json);
+      setEditableOutline(json.outline);
+      setStep(2);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -70,10 +88,71 @@ export default function Home() {
     }
   };
 
+  const generateFinalDraft = async () => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, outline: editableOutline }),
+      });
+      if (!res.ok) {
+        const message = (await res.json())?.error ?? "Unable to generate draft.";
+        throw new Error(message);
+      }
+      const json = (await res.json()) as GeneratedData;
+      setGeneratedData(json);
+      setStep(3);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateOutlineHeading = (index: number, newHeading: string) => {
+    setEditableOutline((prev) =>
+      prev.map((section, i) => (i === index ? { ...section, heading: newHeading } : section)),
+    );
+  };
+
+  const updateOutlineBullet = (sectionIndex: number, bulletIndex: number, newBullet: string) => {
+    setEditableOutline((prev) =>
+      prev.map((section, i) =>
+        i === sectionIndex
+          ? {
+              ...section,
+              bullets: section.bullets.map((b, j) => (j === bulletIndex ? newBullet : b)),
+            }
+          : section,
+      ),
+    );
+  };
+
+  const addOutlineBullet = (sectionIndex: number) => {
+    setEditableOutline((prev) =>
+      prev.map((section, i) =>
+        i === sectionIndex ? { ...section, bullets: [...section.bullets, "New bullet point"] } : section,
+      ),
+    );
+  };
+
+  const removeOutlineBullet = (sectionIndex: number, bulletIndex: number) => {
+    setEditableOutline((prev) =>
+      prev.map((section, i) =>
+        i === sectionIndex
+          ? { ...section, bullets: section.bullets.filter((_, j) => j !== bulletIndex) }
+          : section,
+      ),
+    );
+  };
+
   const headline = useMemo(
     () =>
       form.keyword.length > 0
-        ? `Launch-ready AI blog engine for “${form.keyword}”`
+        ? `Launch-ready AI blog engine for "${form.keyword}"`
         : "Launch-ready AI blog engine",
     [form.keyword],
   );
@@ -89,7 +168,7 @@ export default function Home() {
       <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-10 px-6 py-12 md:py-16">
         <header className="flex flex-col gap-6">
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-cyan-200">
-            Blogy AI – research ➜ generate ➜ optimize ➜ publish
+            Blogy AI – Research ➜ Review ➜ Generate
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl space-y-4">
@@ -97,271 +176,330 @@ export default function Home() {
                 {headline}
               </h1>
               <p className="text-lg text-slate-200/80 md:text-xl">
-                Run keyword clustering, SERP gap analysis, multi-stage prompting, and SEO
-                validation in one flow. Humanized copy, snippet-ready blocks, and platform-aware
-                exports are baked in.
+                Progressive 3-step workflow: generate research, review and edit outline, then create
+                SEO-optimized content with human-in-the-loop control.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <StatPill label="SEO score target" value="80%+" />
-              <StatPill label="AI detect" value="<30%" />
-              <StatPill label="Time to outline" value="~5s" />
+              <StatPill
+                label="Step"
+                value={`${step}/3`}
+                active={true}
+              />
+              <StatPill label="SEO target" value="80%+" active={step === 3} />
+              <StatPill label="AI detect" value="<30%" active={step === 3} />
             </div>
           </div>
         </header>
 
-        <section className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-cyan-200">Input canvas</p>
-              <h2 className="text-2xl font-semibold text-white">Shape the run</h2>
-            </div>
-            <button
-              className="rounded-full bg-cyan-400/90 px-5 py-2 text-sm font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 transition hover:translate-y-[-1px] hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={submit}
-              disabled={loading}
-            >
-              {loading ? "Generating..." : "Generate pipeline"}
-            </button>
-          </div>
-
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <Field
-              label="Target keyword"
-              hint="Primary query that anchors research and generation"
-              value={form.keyword}
-              onChange={(keyword) => setForm((prev) => ({ ...prev, keyword }))}
-            />
-            <Field
-              label="Audience"
-              hint="Who should resonate with this draft"
-              value={form.audience}
-              onChange={(audience) => setForm((prev) => ({ ...prev, audience }))}
-            />
-            <Field
-              label="Intent"
-              hint="Informational, commercial, transactional..."
-              value={form.intent}
-              onChange={(intent) => setForm((prev) => ({ ...prev, intent }))}
-            />
-            <Field
-              label="Brand voice"
-              hint="Optional: tone rules, phrases, do/don'ts"
-              value={form.brandVoice}
-              onChange={(brandVoice) => setForm((prev) => ({ ...prev, brandVoice }))}
-            />
-          </div>
-
-          <div className="mt-6 grid gap-6 md:grid-cols-[2fr_1fr]">
-            <div className="grid gap-4 rounded-2xl border border-white/5 bg-white/5 p-4 md:grid-cols-2">
-              <SelectField
-                label="Tone"
-                value={form.tone}
-                options={["confident", "conversational", "analytical", "playful"]}
-                onChange={(tone) => setForm((prev) => ({ ...prev, tone }))}
-              />
-              <SliderField
-                label="Target length"
-                value={form.targetLength}
-                min={1200}
-                max={3000}
-                step={100}
-                onChange={(targetLength) => setForm((prev) => ({ ...prev, targetLength }))}
-              />
-            </div>
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/5 p-4">
-              <p className="text-sm font-semibold text-white">Publishing presets</p>
-              <div className="flex flex-wrap gap-2">
-                {platformOptions.map((platform) => {
-                  const active = form.platforms.includes(platform);
-                  return (
-                    <button
-                      key={platform}
-                      onClick={() => togglePlatform(platform)}
-                      className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
-                        active
-                          ? "border-cyan-300/80 bg-cyan-300/20 text-cyan-100"
-                          : "border-white/10 bg-white/5 text-slate-200 hover:border-white/30"
-                      }`}
-                    >
-                      {platform}
-                    </button>
-                  );
-                })}
+        {/* Step 1: Input Form */}
+        {step === 1 && (
+          <section className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-cyan-200">Step 1: Input</p>
+                <h2 className="text-2xl font-semibold text-white">Define your content strategy</h2>
               </div>
-              <p className="text-xs text-slate-300/70">
-                Each platform preset tweaks formatting, CTA placement, and schema hints.
-              </p>
+              <button
+                className="rounded-full bg-cyan-400/90 px-5 py-2 text-sm font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 transition hover:translate-y-[-1px] hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={generateResearch}
+                disabled={loading}
+              >
+                {loading ? "Generating research..." : "Generate SEO research"}
+              </button>
             </div>
-          </div>
 
-          {error && (
-            <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-              {error}
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+              <Field
+                label="Target keyword"
+                hint="Primary query that anchors research"
+                value={form.keyword}
+                onChange={(keyword) => setForm((prev) => ({ ...prev, keyword }))}
+              />
+              <Field
+                label="Audience"
+                hint="Who should resonate with this content"
+                value={form.audience}
+                onChange={(audience) => setForm((prev) => ({ ...prev, audience }))}
+              />
+              <Field
+                label="Intent"
+                hint="Informational, commercial, transactional..."
+                value={form.intent}
+                onChange={(intent) => setForm((prev) => ({ ...prev, intent }))}
+              />
+              <Field
+                label="Brand voice"
+                hint="Optional: tone rules, phrases, do/don'ts"
+                value={form.brandVoice}
+                onChange={(brandVoice) => setForm((prev) => ({ ...prev, brandVoice }))}
+              />
             </div>
-          )}
-        </section>
 
-        <section className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
-          <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-            <SectionHeader title="Pipeline status" subtitle="Research → Generate → Optimize → Publish" />
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              {["Research", "Generate", "Optimize", "Publish"].map((step, index) => {
-                const active = loading || data;
-                return (
-                  <div
-                    key={step}
-                    className={`rounded-2xl border px-4 py-4 ${
-                      active ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/5 bg-white/5"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold text-white">{step}</p>
-                    <p className="text-xs text-slate-300/80">
-                      {data?.timeline?.[index]?.detail ??
-                        "Ready to orchestrate research, generation, and publishing."}
-                    </p>
-                  </div>
-                );
-              })}
+            <div className="mt-6 grid gap-6 md:grid-cols-[2fr_1fr]">
+              <div className="grid gap-4 rounded-2xl border border-white/5 bg-white/5 p-4 md:grid-cols-2">
+                <SelectField
+                  label="Tone"
+                  value={form.tone}
+                  options={["confident", "conversational", "analytical", "playful"]}
+                  onChange={(tone) => setForm((prev) => ({ ...prev, tone }))}
+                />
+                <SliderField
+                  label="Target length"
+                  value={form.targetLength}
+                  min={1200}
+                  max={3000}
+                  step={100}
+                  onChange={(targetLength) => setForm((prev) => ({ ...prev, targetLength }))}
+                />
+              </div>
+              <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/5 p-4">
+                <p className="text-sm font-semibold text-white">Publishing platforms</p>
+                <div className="flex flex-wrap gap-2">
+                  {platformOptions.map((platform) => {
+                    const active = form.platforms.includes(platform);
+                    return (
+                      <button
+                        key={platform}
+                        onClick={() => togglePlatform(platform)}
+                        className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                          active
+                            ? "border-cyan-300/80 bg-cyan-300/20 text-cyan-100"
+                            : "border-white/10 bg-white/5 text-slate-200 hover:border-white/30"
+                        }`}
+                      >
+                        {platform}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-            <SectionHeader title="Scorecard goals" subtitle="Guardrails applied automatically" />
-            <ul className="mt-4 space-y-3 text-sm text-slate-200/90">
-              <li>• Keyword placement in H1, intro, and at least two H2s</li>
-              <li>• Definition paragraph, ordered list, and comparison table for snippet readiness</li>
-              <li>• Readability at Grade 8-9 with short paragraphs</li>
-              <li>• CTA variants per platform + schema hints for WordPress</li>
-            </ul>
-            <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-              Bring your OpenRouter API key to unlock live generation. Without it, we’ll use the
-              built-in sample copy.
-            </div>
-          </div>
-        </section>
+            {error && (
+              <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                {error}
+              </div>
+            )}
+          </section>
+        )}
 
-        {data && (
+        {/* Step 2: Review & Edit Outline */}
+        {step === 2 && researchData && (
           <>
+            <section className="grid gap-6 md:grid-cols-2">
+              <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
+                <SectionHeader title="Keyword clusters" subtitle="Primary, pain-point, and proof" />
+                <div className="mt-4 space-y-3">
+                  {researchData.clusters.map((cluster) => (
+                    <div key={cluster.name} className="rounded-2xl border border-white/5 bg-white/5 p-4">
+                      <p className="text-sm font-semibold text-white">{cluster.name}</p>
+                      <p className="text-xs text-cyan-100">Primary: {cluster.primary}</p>
+                      <div className="mt-2 space-y-1 text-xs text-slate-200/80">
+                        {cluster.keywords.map((kw) => (
+                          <div
+                            key={kw.term}
+                            className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 px-2 py-1"
+                          >
+                            <span>{kw.term}</span>
+                            <span className="text-[10px] text-slate-300">
+                              vol {kw.volume} • diff {(kw.difficulty * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
+                <SectionHeader title="SERP gaps" subtitle="Opportunities to differentiate" />
+                <div className="mt-4 space-y-3">
+                  {researchData.serpInsights.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-2xl border border-white/5 bg-white/5 p-4 text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-white">{item.title}</p>
+                          <p className="text-xs text-slate-300">{item.url}</p>
+                        </div>
+                        <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
+                          {item.wordCount}w
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-amber-100">Gaps: {item.gaps.join(" • ")}</p>
+                      <p className="text-xs text-cyan-100">Opportunity: {item.snippetOpportunity}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
             <section className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-              <SectionHeader title="Keyword clustering" subtitle="Primary, pain-point, and proof clusters" />
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                {data.clusters.map((cluster) => (
-                  <div key={cluster.name} className="rounded-2xl border border-white/5 bg-white/5 p-4">
-                    <p className="text-sm font-semibold text-white">{cluster.name}</p>
-                    <p className="text-xs text-cyan-100">Primary: {cluster.primary}</p>
-                    <div className="mt-3 space-y-2 text-xs text-slate-200/80">
-                      {cluster.keywords.map((kw) => (
-                        <div
-                          key={kw.term}
-                          className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 px-2 py-1"
-                        >
-                          <span>{kw.term}</span>
-                          <span className="text-[10px] text-slate-300">
-                            vol {kw.volume} • diff {(kw.difficulty * 100).toFixed(0)}%
-                          </span>
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] text-cyan-200">Step 2: Review</p>
+                  <h2 className="text-2xl font-semibold text-white">Edit outline before generating</h2>
+                  <p className="mt-1 text-sm text-slate-300">
+                    Modify headings and bullets to match your exact needs
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    className="rounded-full border border-white/20 bg-white/5 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                    onClick={() => setStep(1)}
+                  >
+                    ← Back to inputs
+                  </button>
+                  <button
+                    className="rounded-full bg-cyan-400/90 px-5 py-2 text-sm font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 transition hover:translate-y-[-1px] hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={generateFinalDraft}
+                    disabled={loading}
+                  >
+                    {loading ? "Generating draft..." : "Generate final draft"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-4">
+                {editableOutline.map((section, sectionIdx) => (
+                  <div
+                    key={sectionIdx}
+                    className="rounded-2xl border border-white/5 bg-white/5 p-4"
+                  >
+                    <input
+                      type="text"
+                      value={section.heading}
+                      onChange={(e) => updateOutlineHeading(sectionIdx, e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+                    <div className="mt-3 space-y-2">
+                      {section.bullets.map((bullet, bulletIdx) => (
+                        <div key={bulletIdx} className="flex gap-2">
+                          <span className="text-cyan-300">•</span>
+                          <input
+                            type="text"
+                            value={bullet}
+                            onChange={(e) =>
+                              updateOutlineBullet(sectionIdx, bulletIdx, e.target.value)
+                            }
+                            className="flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-1 text-sm text-slate-100 outline-none focus:border-cyan-300/60 focus:ring-1 focus:ring-cyan-400/40"
+                          />
+                          <button
+                            onClick={() => removeOutlineBullet(sectionIdx, bulletIdx)}
+                            className="text-xs text-rose-300 hover:text-rose-100"
+                          >
+                            Remove
+                          </button>
                         </div>
                       ))}
+                      <button
+                        onClick={() => addOutlineBullet(sectionIdx)}
+                        className="text-xs text-cyan-300 hover:text-cyan-100"
+                      >
+                        + Add bullet
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
-            </section>
 
-            <section className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
-              <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-                <SectionHeader title="SERP gap map" subtitle="Top results, coverage gaps, snippet angles" />
-                <div className="mt-4 space-y-3">
-                  {data.serpInsights.map((item) => (
-                    <div
-                      key={item.url}
-                      className="rounded-2xl border border-white/5 bg-white/5 p-4 text-sm text-slate-100"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-semibold">{item.title}</p>
-                          <p className="text-xs text-slate-300">{item.url}</p>
-                        </div>
-                        <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
-                          {item.wordCount} words
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs text-amber-100">
-                        Gaps: {item.gaps.join(" • ")}
-                      </p>
-                      <p className="text-xs text-cyan-100">
-                        Snippet shot: {item.snippetOpportunity}
-                      </p>
-                    </div>
-                  ))}
+              {error && (
+                <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                  {error}
                 </div>
-              </div>
-              <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-                <SectionHeader title="Outline" subtitle="H1/H2/H3 and proof blocks" />
-                <div className="mt-4 space-y-3">
-                  {data.outline.map((section) => (
-                    <div
-                      key={section.heading}
-                      className="rounded-2xl border border-white/5 bg-white/5 p-3"
-                    >
-                      <p className="text-sm font-semibold text-white">{section.heading}</p>
-                      <ul className="mt-2 space-y-1 text-xs text-slate-200/80">
-                        {section.bullets.map((bullet) => (
-                          <li key={bullet}>• {bullet}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </section>
+          </>
+        )}
 
+        {/* Step 3: Final Draft & SEO Score */}
+        {step === 3 && generatedData && (
+          <>
             <section className="grid gap-6 md:grid-cols-[1.3fr_1fr]">
               <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-                <SectionHeader title="Generated draft" subtitle="Humanized, SEO-ready markdown" />
+                <SectionHeader title="Generated draft" subtitle="SEO-optimized markdown" />
                 <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-white/5 bg-black/40 p-4 text-sm leading-relaxed text-slate-100">
-                  {data.generated}
+                  {generatedData.generated}
                 </div>
-                {data.usedFallback && (
+                {generatedData.usedFallback && (
                   <p className="mt-3 text-xs text-amber-200">
-                    Using sample copy. Add your OpenRouter API key for live generation.
+                    Using sample copy. Add OpenRouter API key for live generation.
                   </p>
                 )}
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={() => setStep(2)}
+                    className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    ← Edit outline
+                  </button>
+                  <button
+                    onClick={() => {
+                      setStep(1);
+                      setResearchData(null);
+                      setGeneratedData(null);
+                    }}
+                    className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    Start new
+                  </button>
+                </div>
               </div>
+
               <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
-                <SectionHeader title="SEO validation" subtitle="Scorecard and publishing prep" />
+                <SectionHeader title="SEO validation" subtitle="Real-time analysis" />
                 <div className="flex items-center gap-3">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-2xl font-bold text-emerald-100">
-                    {data.seo.score}
+                  <div
+                    className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold ${
+                      generatedData.seo.score >= 80
+                        ? "bg-emerald-500/20 text-emerald-100"
+                        : generatedData.seo.score >= 60
+                        ? "bg-amber-500/20 text-amber-100"
+                        : "bg-rose-500/20 text-rose-100"
+                    }`}
+                  >
+                    {generatedData.seo.score}
                   </div>
                   <div className="text-sm text-slate-200/90">
-                    <p className="font-semibold text-white">Score target</p>
-                    <p>{data.seo.readability}</p>
-                    <p className="text-cyan-100">{data.seo.snippetReadiness}</p>
+                    <p className="font-semibold text-white">SEO Score</p>
+                    <p>{generatedData.seo.readability}</p>
                   </div>
                 </div>
+
                 <div className="mt-4 space-y-2 text-sm text-slate-200/90">
-                  {data.seo.keywordPlacement.map((item) => (
-                    <div key={item} className="rounded-xl border border-white/5 bg-white/5 px-3 py-2">
+                  {generatedData.seo.keywordPlacement.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/5 bg-white/5 px-3 py-2"
+                    >
                       {item}
                     </div>
                   ))}
                 </div>
+
+                <div className="mt-4 rounded-xl border border-white/5 bg-white/5 px-3 py-2 text-sm">
+                  <p className="font-semibold text-white">Snippet readiness</p>
+                  <p className="text-slate-200/90">{generatedData.seo.snippetReadiness}</p>
+                </div>
+
                 <div className="mt-4 space-y-1 text-xs text-slate-200/80">
                   <p className="font-semibold text-white">Meta</p>
-                  <p>Title: {data.seo.meta.title}</p>
-                  <p>Description: {data.seo.meta.description}</p>
-                  <p>Slug: /{data.seo.meta.slug}</p>
+                  <p>Title: {generatedData.seo.meta.title}</p>
+                  <p>Desc: {generatedData.seo.meta.description}</p>
+                  <p>Slug: /{generatedData.seo.meta.slug}</p>
                 </div>
+
                 <div className="mt-4 space-y-2 text-xs text-slate-200/80">
-                  <p className="font-semibold text-white">FAQ schema ideas</p>
-                  {data.seo.faqs.map((faq) => (
-                    <div key={faq} className="rounded-lg border border-white/5 bg-white/5 px-3 py-2">
+                  <p className="font-semibold text-white">FAQ ideas</p>
+                  {generatedData.seo.faqs.slice(0, 3).map((faq, idx) => (
+                    <div key={idx} className="rounded-lg border border-white/5 bg-white/5 px-3 py-2">
                       {faq}
                     </div>
                   ))}
-                  <p className="font-semibold text-white">CTA variants</p>
-                  <p>{data.seo.ctas.join(" • ")}</p>
                 </div>
               </div>
             </section>
@@ -473,9 +611,13 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
   );
 }
 
-function StatPill({ label, value }: { label: string; value: string }) {
+function StatPill({ label, value, active }: { label: string; value: string; active?: boolean }) {
   return (
-    <div className="flex flex-col items-start rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-200/90">
+    <div
+      className={`flex flex-col items-start rounded-2xl border px-4 py-3 text-xs text-slate-200/90 ${
+        active ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-white/5"
+      }`}
+    >
       <span className="text-[10px] uppercase tracking-[0.3em] text-cyan-200">{label}</span>
       <span className="text-lg font-semibold text-white">{value}</span>
     </div>
