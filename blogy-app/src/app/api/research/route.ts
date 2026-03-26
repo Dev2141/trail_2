@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { PipelineRequest, KeywordCluster, SerpInsight, OutlineSection } from "@/lib/pipeline";
 
-const openRouterClient = process.env.OPENROUTER_API_KEY
+const openRouterClient = process.env.LLAMA_API_KEY
   ? new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.LLAMA_API_KEY,
+      baseURL: process.env.LLAMA_BASE_URL || "https://ollama.com",
     })
   : null;
 
@@ -28,7 +28,7 @@ async function generateClusters(keyword: string): Promise<KeywordCluster[]> {
 
   try {
     const completion = await openRouterClient.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: process.env.LLAMA_MODEL || "gpt-oss:120b-cloud",
       temperature: 0.7,
       max_tokens: 1500,
       messages: [
@@ -94,7 +94,7 @@ async function generateSerpInsights(keyword: string): Promise<SerpInsight[]> {
 
   try {
     const completion = await openRouterClient.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: process.env.LLAMA_MODEL || "gpt-oss:120b-cloud",
       temperature: 0.7,
       max_tokens: 1500,
       messages: [
@@ -174,7 +174,7 @@ async function generateOutline(
 
   try {
     const completion = await openRouterClient.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: process.env.LLAMA_MODEL || "gpt-oss:120b-cloud",
       temperature: 0.7,
       max_tokens: 2000,
       messages: [

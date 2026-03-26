@@ -422,14 +422,17 @@ export default function Home() {
             <section className="grid gap-6 md:grid-cols-[1.3fr_1fr]">
               <div className={`${gradientBorder} rounded-3xl p-6 md:p-8`}>
                 <SectionHeader title="Generated draft" subtitle="SEO-optimized markdown" />
-                <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-white/5 bg-black/40 p-4 text-sm leading-relaxed text-slate-100">
-                  {generatedData.generated}
+                <div className="mt-4 overflow-y-auto max-h-[70vh] rounded-2xl border border-white/5 bg-black/40 p-6 text-sm leading-relaxed text-slate-100">
+                  <MarkdownRenderer content={generatedData.generated} />
                 </div>
                 {generatedData.usedFallback && (
                   <p className="mt-3 text-xs text-amber-200">
-                    Using sample copy. Add OpenRouter API key for live generation.
+                    Using sample copy — add your API key for live generation.
                   </p>
                 )}
+                <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+                  <span className="font-semibold">⚠️ Fact-check reminder:</span> Statistics and case studies marked with <em>(example – verify before publishing)</em> are illustrative. Always verify data from original sources (Google, Ahrefs, Semrush) before publishing.
+                </div>
                 <div className="mt-4 flex gap-3">
                   <button
                     onClick={() => setStep(2)}
@@ -597,6 +600,114 @@ function SliderField({
       />
     </label>
   );
+}
+
+function MarkdownRenderer({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let tableBuffer: string[] = [];
+  let keyRef = 0;
+  const nextKey = () => keyRef++;
+
+  const flushTable = () => {
+    if (tableBuffer.length < 2) { tableBuffer = []; return; }
+    const headers = tableBuffer[0].split("|").map(c => c.trim()).filter(Boolean);
+    const rows = tableBuffer.slice(2).map(r => r.split("|").map(c => c.trim()).filter(Boolean));
+    elements.push(
+      <div key={nextKey()} className="overflow-x-auto my-4">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr>{headers.map((h, i) => <th key={i} className="border border-white/20 bg-white/10 px-3 py-2 text-left font-semibold text-cyan-100">{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} className={ri % 2 === 0 ? "bg-white/5" : ""}>{row.map((cell, ci) => <td key={ci} className="border border-white/10 px-3 py-1.5">{cell}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    tableBuffer = [];
+  };
+
+  const inlineStyles = (text: string): React.ReactNode => {
+    const withBr = text.replace(/<br\s*\/?>/gi, "\n");
+    const segments = withBr.split("\n");
+    return segments.map((seg, si) => (
+      <span key={si}>
+        {si > 0 && <br />}
+        {seg.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g).map((part, i) => {
+          if (part.startsWith("**") && part.endsWith("**")) return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+          if (part.startsWith("*") && part.endsWith("*")) return <em key={i} className="italic text-slate-200">{part.slice(1, -1)}</em>;
+          if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="rounded bg-white/10 px-1 py-0.5 font-mono text-cyan-200">{part.slice(1, -1)}</code>;
+          return part;
+        })}
+      </span>
+    ));
+  };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Fenced code block
+    if (line.trimStart().startsWith("```")) {
+      if (tableBuffer.length) flushTable();
+      const lang = line.trim().slice(3).trim() || "";
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <div key={nextKey()} className="my-4 rounded-xl overflow-hidden border border-white/10">
+          {lang && (
+            <div className="bg-white/10 px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-cyan-300">{lang}</div>
+          )}
+          <pre className="overflow-x-auto bg-black/50 p-4 text-xs font-mono text-slate-200 leading-relaxed">
+            <code>{codeLines.join("\n")}</code>
+          </pre>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    if (line.startsWith("|")) { tableBuffer.push(line); i++; continue; }
+    if (tableBuffer.length) flushTable();
+
+    if (line.startsWith("# ")) {
+      elements.push(<h1 key={nextKey()} className="mb-3 mt-6 text-2xl font-bold text-white first:mt-0">{inlineStyles(line.slice(2))}</h1>);
+    } else if (line.startsWith("## ")) {
+      elements.push(<h2 key={nextKey()} className="mb-2 mt-5 text-xl font-semibold text-cyan-100">{inlineStyles(line.slice(3))}</h2>);
+    } else if (line.startsWith("### ")) {
+      elements.push(<h3 key={nextKey()} className="mb-2 mt-4 text-base font-semibold text-cyan-200">{inlineStyles(line.slice(4))}</h3>);
+    } else if (line.startsWith("#### ")) {
+      elements.push(<h4 key={nextKey()} className="mb-1 mt-3 text-sm font-semibold text-cyan-300">{inlineStyles(line.slice(5))}</h4>);
+    } else if (/^\d+\.\s/.test(line)) {
+      elements.push(<p key={nextKey()} className="my-0.5 pl-4">{inlineStyles(line)}</p>);
+    } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      elements.push(
+        <div key={nextKey()} className="flex gap-2 my-0.5">
+          <span className="mt-1 text-cyan-400 shrink-0">•</span>
+          <span>{inlineStyles(line.slice(2))}</span>
+        </div>
+      );
+    } else if (line.startsWith(">")) {
+      elements.push(<blockquote key={nextKey()} className="my-2 border-l-2 border-cyan-400/60 pl-4 italic text-slate-300">{inlineStyles(line.slice(1).trim())}</blockquote>);
+    } else if (line.startsWith("---") || line.startsWith("***")) {
+      elements.push(<hr key={nextKey()} className="my-4 border-white/10" />);
+    } else if (line.trim() === "") {
+      elements.push(<div key={nextKey()} className="h-2" />);
+    } else {
+      elements.push(<p key={nextKey()} className="my-1 text-slate-100">{inlineStyles(line)}</p>);
+    }
+    i++;
+  }
+  if (tableBuffer.length) flushTable();
+
+  return <div className="space-y-0.5">{elements}</div>;
 }
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {

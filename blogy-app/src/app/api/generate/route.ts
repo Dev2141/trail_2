@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { PipelineRequest, OutlineSection, SeoScorecard } from "@/lib/pipeline";
 
-const openRouterClient = process.env.OPENROUTER_API_KEY
+const openRouterClient = process.env.LLAMA_API_KEY
   ? new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.LLAMA_API_KEY,
+      baseURL: process.env.LLAMA_BASE_URL || "https://ollama.com",
     })
   : null;
 
@@ -62,7 +62,7 @@ async function generateContent(
   try {
     // Stage 1: Expand outline
     const stage1 = await openRouterClient.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: process.env.LLAMA_MODEL || "gpt-oss:120b-cloud",
       temperature: 0.65,
       max_tokens: 2000,
       messages: [
@@ -91,14 +91,14 @@ Expand with specific examples, data points, and structure. Return markdown.`,
     // Stage 2: Write content
     const platformNotes = payload.platforms.map(platformEdge).join(" ");
     const stage2 = await openRouterClient.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: process.env.LLAMA_MODEL || "gpt-oss:120b-cloud",
       temperature: 0.65,
       max_tokens: 4000,
       messages: [
         {
           role: "system",
           content:
-            "You are an expert content writer. Write engaging, well-structured SEO content in markdown.",
+            "You are an expert content writer. Write engaging, well-structured SEO content in markdown. IMPORTANT: Never fabricate statistics, studies, or citations. If you want to include data, either use well-known general knowledge (e.g. 'Google processes 8.5 billion searches per day') or clearly label examples as illustrative (e.g. '*(example stat – verify before publishing)*'). Do not invent publication names, research papers, or case study results.",
         },
         {
           role: "user",
@@ -124,6 +124,8 @@ Requirements:
 - Natural keyword usage (1-2% density)
 - ${platformNotes}
 - 2 strong CTAs at end
+- Any statistics must be real and well-known, OR labeled as *(example – verify before publishing)*
+- Fictional case studies must be clearly labeled as "Hypothetical Example" not presented as real
 
 Write complete markdown:`,
         },
@@ -134,13 +136,13 @@ Write complete markdown:`,
 
     // Stage 3: Refine and humanize
     const stage3 = await openRouterClient.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: process.env.LLAMA_MODEL || "gpt-oss:120b-cloud",
       temperature: 0.7,
       max_tokens: 4000,
       messages: [
         {
           role: "system",
-          content: "You are an SEO optimizer and content humanizer. Refine to pass AI detection.",
+          content: "You are an SEO optimizer and content humanizer. Refine to pass AI detection. IMPORTANT: Remove any fabricated statistics, fake citations, or invented publication names. If a stat cannot be verified, replace it with a clearly labeled illustrative example like *(example stat – verify before publishing)* or remove it. Never invent case study results — label them clearly as 'Hypothetical Example'.",
         },
         {
           role: "user",
@@ -159,6 +161,8 @@ Tasks:
 5. Verify table + numbered list present
 6. Strengthen CTAs
 7. Maintain ${payload.tone} tone
+8. Flag any unverifiable statistics with *(example – verify before publishing)*
+9. Label any fictional case studies as "Hypothetical Example"
 
 Return refined markdown:`,
         },
